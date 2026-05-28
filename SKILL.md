@@ -5,38 +5,45 @@ This skill automates the creation of a multi-segment whiteboard explainer video 
 ## Workflow
 
 ### 1. Project Scaffolding
-- Initialize a Remotion project using the template from `/home/anant/.gemini/skills/whiteboard-explainer/assets/template/`.
-- Ensure `@remotion/transitions` is installed.
-- Copy `/home/anant/.gemini/skills/whiteboard-explainer/references/components.tsx` to `src/components.tsx`.
+- Initialize a Remotion project using the template from /home/anant/.gemini/skills/whiteboard-explainer/assets/template/.
+- Ensure @remotion/transitions and @remotion/google-fonts are installed.
+- Copy /home/anant/.gemini/skills/whiteboard-explainer/references/components.tsx to src/components.tsx.
 
-### 2. Multi-Agent Delegation
-For every `[Image Prompt]` and `[Voiceover]` pair provided by the user, invoke a `generalist` sub-agent to handle the segment generation in parallel.
+### 2. Master Audio Generation (Crucial)
+- **Do not generate audio scene-by-scene.**
+- Concatenate all scene scripts into one master_script.txt. **Ensure double newlines separate each scene's text**, as the TTS script detects scenes based on paragraphs.
+- Run the TTS script on the entire text: node /home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs public/master "\$(cat master_script.txt)".
+- Use public/master/timestamps.json as the master clock for the entire project.
+
+### 3. Multi-Agent Delegation (Visuals Only)
+For every [Image Prompt] and [Voiceover] pair, invoke a generalist sub-agent.
 
 **Sub-Agent Prompt Template:**
 > Task: Create whiteboard explainer segment for Segment {N}.
 > 
 > Visual Prompt: {Prompt}
-> Voiceover: {Voiceover}
 > 
 > Instructions:
-> 1. Create directory `public/segment{N}`.
-> 2. Generate `public/segment{N}/diagram.svg` using simple `<path>` and `<text>` elements.
-> 3. Run `node /home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs public/segment{N} "{Voiceover}"`.
-> 4. Create `src/Segment{N}.tsx` using `SketchyPath` and `HandDrawnText` from `./components`. Sync animations with `timestamps.json`.
-> 5. Export the component for use in a Series.
+> 1. Create src/Segment{N}.tsx.
+> 2. Use a **0.25x speed factor** for all animations (4x speed) to ensure elements "snap" into place.
+> 3. Map **100% of SVG paths** and details (faces, decorations) to SketchyPath.
+> 4. Synchronize triggers with the master timestamps.json.
+> 5. Ensure all animations end at least **1.5 seconds before the segment ends**.
+> 6. **Text Integrity:** Ensure all text is precisely contained within its respective box or visual boundary. Use manual line breaks (\n) or adjust fontSize dynamically to prevent any overflow or "text bleed" outside of containers.
 
-### 3. Cinematic Assembly (`src/Main.tsx`)
-Once all sub-agents finish, use `TransitionSeries` from `@remotion/transitions` to stitch segments together.
+### 4. Cinematic Assembly (src/Main.tsx)
+Stitch segments using TransitionSeries.
 
-- **Transition:** Use `slide({ direction: 'from-right' })` or `fade()` between scenes.
-- **Timing:** Use `linearTiming({ durationInFrames: 20 })`.
-- **Normalization:** Ensure all segments use `backgroundColor: "white"` for seamless transitions.
+- **Sequence Duration:** To ensure perfect audio synchronization, the durationInFrames for Sequence N must exactly match the length of the audio scene. Calculate this by setting it to (audio_start_frame of Scene N+1) - (audio_start_frame of Scene N). Do NOT use an arbitrary visual buffer, as this causes desynchronization. The visual transition to the next scene must begin exactly when the audio for that next scene starts.
+- **Final Scene Dwell:** For the **last segment**, add a **2-second (60 frames at 30fps)** "dwell time" after the audio ends to allow the final visual to settle before the video finishes.
+- **Transition:** Use slide({ direction: 'from-right' }).
+- **Timing:** Use linearTiming({ durationInFrames: 15 }).
 
-### 4. Final Render
-- Calculate total duration in `src/Root.tsx` (Sum of segment durations minus transition overlaps).
-- Run `npx remotion render FinalExplainer out.mp4`.
+### 5. Final Render
+- **Synchronization Check:** Calculate total duration in src/Root.tsx to precisely match (total_audio_duration + final_dwell_time). This prevents audio cutoff or "moov atom" errors caused by mismatched stream lengths.
+- Render using safe software encoding settings to avoid MP4 container corruption: npx remotion render FinalExplainer out.mp4 --concurrency=4 --timeout=120000. Do NOT use experimental GPU flags like --gl=egl unless hardware stability is fully confirmed on the host machine.
 
 ## Shared Resources
-- **TTS Script:** `/home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs`
-- **Components:** `/home/anant/.gemini/skills/whiteboard-explainer/references/components.tsx`
-- **Template:** `/home/anant/.gemini/skills/whiteboard-explainer/assets/template/`
+- **TTS Script:** /home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs
+- **Components:** /home/anant/.gemini/skills/whiteboard-explainer/references/components.tsx
+- **Template:** /home/anant/.gemini/skills/whiteboard-explainer/assets/template/
