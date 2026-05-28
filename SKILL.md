@@ -7,12 +7,97 @@ This skill automates the creation of a multi-segment whiteboard explainer video 
 ### 1. Project Scaffolding
 - Initialize a Remotion project using the template from /home/anant/.gemini/skills/whiteboard-explainer/assets/template/.
 - Ensure @remotion/transitions and @remotion/google-fonts are installed.
-- Copy /home/anant/.gemini/skills/whiteboard-explainer/references/components.tsx to src/components.tsx.
+- **Create src/components.tsx** with the following content:
+
+```tsx
+import React from "react";
+import { interpolate, useCurrentFrame, Easing } from "remotion";
+import { loadFont } from "@remotion/google-fonts/ArchitectsDaughter";
+
+const { fontFamily } = loadFont();
+
+export const SketchyPath: React.FC<{
+  d: string;
+  startFrame: number;
+  duration: number;
+  stroke?: string;
+  strokeWidth?: number;
+  fill?: string;
+  opacity?: number;
+}> = ({
+  d,
+  startFrame,
+  duration,
+  stroke = "#000",
+  strokeWidth = 2,
+  fill = "none",
+  opacity = 1,
+}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame, [startFrame, startFrame + duration], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.inOut(Easing.quad),
+  });
+
+  const pathRef = React.useRef<SVGPathElement>(null);
+  const [length, setLength] = React.useState(0);
+
+  React.useEffect(() => {
+    if (pathRef.current) setLength(pathRef.current.getTotalLength());
+  }, []);
+
+  return (
+    <path
+      ref={pathRef}
+      d={d}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      strokeDasharray={length || 1000}
+      strokeDashoffset={length * (1 - progress)}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ opacity }}
+    />
+  );
+};
+
+export const HandDrawnText: React.FC<{
+  text: string;
+  x: number;
+  y: number;
+  startFrame: number;
+  fontSize?: number;
+  color?: string;
+  align?: "start" | "middle" | "end";
+}> = ({ text, x, y, startFrame, fontSize = 24, color = "#000", align = "middle" }) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame, [startFrame, startFrame + text.length * 2], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fontFamily={fontFamily}
+      fontSize={fontSize}
+      fill={color}
+      textAnchor={align}
+      style={{ filter: "url(#rough-paper)" }}
+    >
+      {text.slice(0, Math.floor(text.length * progress))}
+    </text>
+  );
+};
+```
 
 ### 2. Master Audio Generation (Crucial)
 - **Do not generate audio scene-by-scene.**
 - Concatenate all scene scripts into one master_script.txt. **Ensure double newlines separate each scene's text**, as the TTS script detects scenes based on paragraphs.
-- Run the TTS script on the entire text: node /home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs public/master "\$(cat master_script.txt)".
+- Run the TTS script on the entire text: `node /home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs public/master "PASTE_TEXT_HERE"`.
 - Use public/master/timestamps.json as the master clock for the entire project.
 
 ### 3. Multi-Agent Delegation (Visuals Only)
@@ -45,5 +130,4 @@ Stitch segments using TransitionSeries.
 
 ## Shared Resources
 - **TTS Script:** /home/anant/.gemini/skills/whiteboard-explainer/scripts/generate_tts.mjs
-- **Components:** /home/anant/.gemini/skills/whiteboard-explainer/references/components.tsx
 - **Template:** /home/anant/.gemini/skills/whiteboard-explainer/assets/template/
